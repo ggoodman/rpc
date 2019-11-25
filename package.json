@@ -1,0 +1,40 @@
+{
+  "name": "@ggoodman/rpc",
+  "version": "0.0.0",
+  "description": "A fully-typed, transport-agnostic, bi-directional RPC framework that also supports passing functions as parameters and returning functions as results.",
+  "browser": "dist/dist-browser/index.js",
+  "main": "dist/dist-main/index.js",
+  "module": "dist/dist-module/index.js",
+  "types": "./dist/dist-main/index.d.ts",
+  "scripts": {
+    "build": "rollup -c",
+    "prepack": "npm run build",
+    "test": "lab -fSv --globals globalThis --pattern **/*.ts --transform ./test/lib/typescript.js"
+  },
+  "keywords": [],
+  "author": "Geoff Goodman <geoff@goodman.dev> (https://geoff@goodman.dev)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:ggoodman/rpc.git"
+  },
+  "homepage": "https://github.com/ggoodman/rpc",
+  "dependencies": {
+    "ts-primitives": "^1.1.0"
+  },
+  "devDependencies": {
+    "@hapi/code": "^7.0.0",
+    "@hapi/lab": "^21.0.0",
+    "@wessberg/rollup-plugin-ts": "^1.1.80",
+    "prettier": "^1.19.1",
+    "rollup": "^1.27.4",
+    "rollup-plugin-commonjs": "^10.1.0",
+    "rollup-plugin-node-resolve": "^5.2.0",
+    "typescript": "^3.7.2"
+  },
+  "prettier": {
+    "printWidth": 100,
+    "singleQuote": true,
+    "trailingComma": "es5"
+  }
+}
