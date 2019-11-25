@@ -1,8 +1,27 @@
 import { Emitter } from 'ts-primitives';
 
+/**
+ * The interface for rpc-compatible transports.
+ */
 export interface Transport {
+  /**
+   * Dispose of this transport and free any allocated resources.
+   */
   dispose(): void;
+
+  /**
+   * Register a RPC message listener with the transport
+   *
+   * @param handler A handler function to be called with each RPC message received from a peer
+   */
   onMessage(handler: (msg: unknown[]) => void): { dispose(): void };
+
+  /**
+   * Send an RPC message to the peer over this transport
+   *
+   * @param msg The array-encoded message that should be sent to the peer over the transport
+   * @param transfer An optional array of objects that should be marked as transferrable when the transport supports it
+   */
   sendMessage(msg: unknown[], transfer?: unknown[]): void;
 }
 
