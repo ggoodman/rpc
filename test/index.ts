@@ -151,4 +151,50 @@ describe('The end to end protocol', () => {
 
     expect(await pong()).to.equal(now);
   });
+
+  it('supports invoking methods on one peer through another peer', async (flags: script.Flags) => {
+    const disposable = new DisposableStore();
+    flags.onCleanup = () => disposable.dispose();
+
+    const bridge1 = new TransportBridge();
+    disposable.add(bridge1);
+
+    const leftApi1 = {
+      listEntries: (cb: (err: null | Error, entries: string[]) => void) => {
+        // Ooops, while I implement this API, I can't actually fulfill it
+        // but I'm connected to another Peer that _CAN_.
+        return right2.invoke('listEntries', cb);
+      },
+    };
+
+    const left1 = expose(leftApi1).connect(bridge1.left);
+    const right1 = connect<typeof leftApi1>(bridge1.right);
+    disposable.add(left1);
+    disposable.add(right1);
+
+    const bridge2 = new TransportBridge();
+    disposable.add(bridge2);
+
+    const leftApi2 = {
+      listEntries: (cb: (err: null | Error, entries: string[]) => void) => {
+        // I happen to be a peer that _CAN_ implement listEntries
+        return cb(null, ['hello', 'world']);
+      },
+    };
+
+    const left2 = expose(leftApi2).connect(bridge2.left);
+    const right2 = connect<typeof leftApi2>(bridge2.right);
+    disposable.add(left2);
+    disposable.add(right2);
+
+    const invokePromise = right1.invoke(
+      'listEntries',
+      flags.mustCall((err: null | Error, entries: string[]) => {
+        expect(err).to.be.null();
+        expect(entries).to.equal(['hello', 'world']);
+      }, 1)
+    );
+
+    expect(await invokePromise).to.be.undefined();
+  });
 });
