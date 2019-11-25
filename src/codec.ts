@@ -1,6 +1,4 @@
 import { WrappedType, WrappedError, WrappedFunction } from './types';
-import { dfdForReq } from './util';
-import { Transport } from './transport';
 
 const resolvedPromise = Promise.resolve();
 

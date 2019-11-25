@@ -1,4 +1,4 @@
-import { DisposableStore, MappedIterator } from 'ts-primitives';
+import { DisposableStore } from 'ts-primitives';
 
 import { dfdForReq } from './util';
 import { Codec, ErrorCodec, FunctionCodec } from './codec';
