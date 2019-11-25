@@ -28,13 +28,60 @@ const api = expose(localApi).connect<RemoteApiType>(transport);
 
 Connects to a remote API over the given `transport` and returns an `API` instance.
 
-### `API#invoke(methodName, ...args): Promise<ReturnType>`
+### `API`
+
+Represents an instance of a connected RPC API.
+
+#### `invoke(methodName, ...args): Promise<ReturnType>`
 
 Invoke `methodName` on the other side of the transport with args `...args`. This will _always_ return a `Promise`.
 
-### `API#dispose()`
+#### `dispose()`
 
 Frees up resources, disposes the transport and any installed `Codec`s.
+
+### `Transport`
+
+Exposes factory functions for constructing `Transport`s for various use-cases. `Transport` is also an interface describing the required API for compatible transports that can be used with this library.
+
+```typescript
+/**
+ * The interface for rpc-compatible transports.
+ */
+export interface Transport {
+  /**
+   * Dispose of this transport and free any allocated resources.
+   */
+  dispose(): void;
+
+  /**
+   * Register a RPC message listener with the transport
+   *
+   * @param handler A handler function to be called with each RPC message received from a peer
+   */
+  onMessage(handler: (msg: unknown[]) => void): { dispose(): void };
+
+  /**
+   * Send an RPC message to the peer over this transport
+   *
+   * @param msg The array-encoded message that should be sent to the peer over the transport
+   * @param transfer An optional array of objects that should be marked as transferrable when the transport supports it
+   */
+  sendMessage(msg: unknown[], transfer?: unknown[]): void;
+}
+```
+
+#### `fromNodeMessagePort(port): Transport`
+
+Construct a `Transport` from a Node-compatible `MessagePort`.
+
+#### `fromNodeDomPort(port): Transport`
+
+Construct a `Transport` from a browser-compatible `MessagePort`.
+
+#### `fromNodeDomWorker(worker): Transport`
+
+Construct a `Transport` from a browser-compatible `Worker`.
 
 ## Example
 
@@ -43,17 +90,19 @@ functions like data. In JavaScript, this a basic part of how idiomatic code is w
 tricky when function calls need to cross process boundaries.
 
 ```typescript
+import { connect, Transport } from '@ggoodman/rpc';
+
 interface RemoteApi {
   /**
    * A function that will return a function that will, itself, return the argument
    * passed to the first function
    */
-  ping<T>(value: T) => () => T;
+  ping(value: number) => () => number;
 }
 
 // We're going to connect to the transport and define the shape of the remote
 // api with the interface RemoteApi.
-const api = connect<RemoteApi>(transport);
+const api = connect<RemoteApi>(Transport.fromDomWorker(worker));
 const now = Date.now();
 
 // Let's invoke the `ping` function exposed by the other peer.
