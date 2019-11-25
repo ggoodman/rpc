@@ -125,4 +125,30 @@ describe('The end to end protocol', () => {
     await expect(await right.invoke('rollTheDice', 3)).to.equal(3);
     await expect(right.invoke('rollTheDice', 7)).to.reject(Error, 'Craps');
   });
+
+  it('supports the ping-pong example', async (flags: script.Flags) => {
+    const disposable = new DisposableStore();
+    flags.onCleanup = () => disposable.dispose();
+
+    const bridge = new TransportBridge();
+    disposable.add(bridge);
+
+    const leftApi = {
+      ping: (value: number) => {
+        return function pong() {
+          return value;
+        };
+      },
+    };
+
+    const left = expose(leftApi).connect(bridge.left);
+    const right = connect<typeof leftApi>(bridge.right);
+    disposable.add(left);
+    disposable.add(right);
+
+    const now = Date.now();
+    const pong = await right.invoke('ping', now);
+
+    expect(await pong()).to.equal(now);
+  });
 });
