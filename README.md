@@ -4,6 +4,70 @@ A fully-typed, transport-agnostic, bi-directional RPC framework that also suppor
 
 In JavaScript, passing around first-class functions is a basic part of writing idiomatic code. Unfortunately, as soon as a process (or context) boundary is introduced between the caller and callee, this breaks down. JavaScript `Function`s are not `Transferable` objects. This library aims to help with situations where two processes or contexts need to invoke functions between themselves and may even want to pass around callback functions.
 
+## Example
+
+Here is an example of one side of an RPC use-case. Imagine we are writing an in-browser editor (something like the [Velcro Playground](https://ggoodman.github.io/velcro)) where we have some expensive logic we want to delegate to a Worker. Here, let's imagine we want to ask the worker to acquire all typings files for a set of dependencies. For each dependency that is found, we provide a callback that should be falled with a `{ path, content }` object.
+
+> Note: It is interesting to point out that even though this logic is crossing a process boundary, we are freely passing callback functions in the arguments. The local peer passes a callback and the remote peer receives a function while the library handles piping the two together.
+
+**`workerClient.ts`**:
+
+```typescript
+import { connect, Transport } from '@ggoodman/rpc';
+
+import { WorkerApi } from './workerImpl';
+
+// Let's imagine we're using https://github.com/GoogleChromeLabs/worker-plugin in a Webpack setup
+const worker = new Worker('./workerImpl', { type: 'module' });
+
+// Expose our local api and connect to the peer in the worker over a DOM worker transport. We
+// indicate the shape of the API the peer exposes as a template type to the connect function.
+// This gives us full intellisense on calls to `Peer#invoke()` later.
+const workerPeer = connect<WorkerApi>(Transport.fromDomWorker(worker));
+
+/**
+ * Acquire types for a set of dependencies
+ *
+ * @param dependencies The mapping of dependency modules names to semver ranges
+ * @param onDependency A callback function that will be fired for each discovered typing file
+ */
+export function acquireTypes(
+  dependencies: Record<string, string>,
+  onDependency: (file: { path: string; content: string }) => void
+) {
+  // We're going to delegate this call to the worker. Note that we're passing in the `onDependency`
+  // function without any gymnastics. The RPC library makes this sort of workflow frictionless.
+  return workerPeer.invoke('acquireTypes', dependencies, onDependency);
+}
+```
+
+**`workerImpl.ts`**:
+
+```typescript
+import { connect, Transport } from '@ggoodman/rpc';
+
+const workerApi = {
+  acquireTypes: async (
+    dependencies: Record<string, string>,
+    onDependency: (file: { path: string; content: string }) => void
+  ) => {
+    // Actually acquire types here. Let's pretend that this logic makes sense even though it is
+    // total nonsense.
+    for (const dependency in dependencies) {
+      // Here is where reality conflicts a bit with developer ergonomics. Since `onDependency` is
+      // a function whose implementation lives on another Peer, we *should* await its invocation
+      // if we want to enforce strict ordering. Otherwise, the Promise returned from the Peer's
+      // call to `acquireTypes` will likely settle before all calls to `onDependency` have
+      // completed. If fire-and-forget behaviour is acceptable, you can skip the `await` here.
+      await onDependency({
+        path: `/node_modules/${dependency}/index.d.ts`,
+        content: `declare module "${dependency}" {}`,
+      });
+    }
+  },
+};
+```
+
 ## Installation
 
 ```sh
@@ -82,35 +146,3 @@ Construct a `Transport` from a browser-compatible `MessagePort`.
 #### `fromNodeDomWorker(worker): Transport`
 
 Construct a `Transport` from a browser-compatible `Worker`.
-
-## Example
-
-Here is an example of one side of an RPC use-case. It is interesting in that we are passing around
-functions like data. In JavaScript, this a basic part of how idiomatic code is written but becomes
-tricky when function calls need to cross process boundaries.
-
-```typescript
-import { connect, Transport } from '@ggoodman/rpc';
-
-interface RemoteApi {
-  /**
-   * A function that will return a function that will, itself, return the argument
-   * passed to the first function
-   */
-  ping(value: number) => () => number;
-}
-
-// We're going to connect to the transport and define the shape of the remote
-// api with the interface RemoteApi.
-const api = connect<RemoteApi>(Transport.fromDomWorker(worker));
-const now = Date.now();
-
-// Let's invoke the `ping` function exposed by the other peer.
-const pong = await api.invoke('ping', now);
-
-// The peer sends us back a `pong` function. Calling it gives us
-// back the `now` value that we originally called `ping` with.
-const result = await pong();
-
-// result === now
-```
