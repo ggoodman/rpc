@@ -8,8 +8,9 @@ export class Encoder {
       case 'string':
       case 'number':
       case 'boolean':
-      case 'undefined':
         return value;
+      case 'undefined':
+        return { $: 'u' };
     }
 
     if (value === null) {
