@@ -1,14 +1,18 @@
 import { Transport } from './transport';
-import { Protocol } from './protocol';
+import { Peer } from './peer';
 
-type Primitive = string | number | boolean | null | undefined | void;
+type Primitive = string | number | boolean | undefined | null;
 type AnyFunc = (...args: any[]) => any;
-type AnyExposedFunc = (...args: (Primitive | AnyExposedFunc)[]) => (Primitive | AnyExposedFunc);
+type AnyExposedFunc = (...args: (Primitive | AnyExposedFunc)[]) => Primitive | AnyExposedFunc;
 type ExposedFunction<
   T extends AnyFunc = AnyFunc,
   TArgs = Parameters<T>,
   TReturn = ReturnType<T>
-> = TArgs extends (Primitive | AnyExposedFunc)[] ? (TReturn extends (Primitive | AnyExposedFunc) ? T : never) : never;
+> = TArgs extends (Primitive | AnyExposedFunc)[]
+  ? TReturn extends Primitive | AnyExposedFunc
+    ? T
+    : never
+  : never;
 type LocalApi = {
   [methodName: string]: ExposedFunction;
 };
@@ -20,11 +24,11 @@ class Builder<TLocalApi extends LocalApi> {
   private localApi?: TLocalApi;
 
   connect<TRemoteApi extends RemoteApi>(transport: Transport) {
-    return new Protocol<TRemoteApi, TLocalApi>(transport, this.localApi);
+    return new Peer<TRemoteApi, TLocalApi>(transport, this.localApi);
   }
 
-  static fromLocalApi(localApi: LocalApi) {
-    const builder = new Builder<LocalApi>();
+  static fromLocalApi<TLocalApi extends LocalApi>(localApi: TLocalApi) {
+    const builder = new Builder<TLocalApi>();
 
     builder.localApi = localApi;
 
@@ -33,7 +37,7 @@ class Builder<TLocalApi extends LocalApi> {
 }
 
 export function connect<TRemoteApi extends RemoteApi>(transport: Transport) {
-  return new Protocol<TRemoteApi>(transport);
+  return new Peer<TRemoteApi>(transport);
 }
 
 export function expose(localApi: LocalApi) {
