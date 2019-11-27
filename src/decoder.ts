@@ -1,5 +1,5 @@
 import { Codec } from './codec';
-import { isWrappedType } from './types';
+import { isWrappedType, isWrappedTypeOfKind } from './types';
 
 export class Decoder {
   constructor(private readonly codecs: Map<string, Codec>) {}
@@ -9,12 +9,15 @@ export class Decoder {
       case 'string':
       case 'number':
       case 'boolean':
-      case 'undefined':
         return value;
     }
 
     if (value === null) {
       return null;
+    }
+
+    if (isWrappedTypeOfKind(value, 'u')) {
+      return undefined;
     }
 
     if (isWrappedType(value)) {
