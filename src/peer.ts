@@ -21,7 +21,7 @@ type EnsurePromise<T> = T extends Promise<any> ? T : Promise<T>;
 
 const resolvedPromise = Promise.resolve();
 
-export class Protocol<
+export class Peer<
   TRemoteApi extends { [method: string]: (...args: any[]) => any },
   TLocalApi extends { [method: string]: (...args: any[]) => any } | undefined = undefined
 > {
@@ -33,11 +33,19 @@ export class Protocol<
   private nextReqId = 1;
   private readonly pendingRemoteOperations = new Map<number, ReturnType<typeof dfdForReq>>();
 
-  constructor(private readonly transport: Transport, private readonly localApi?: TLocalApi) {
+  constructor(
+    private readonly transport: Transport,
+    private readonly localApi?: TLocalApi,
+    codecs: Codec[] = []
+  ) {
     this.functionCodec = new FunctionCodec(this.invokeAnonymous.bind(this));
 
     this.addCodec(new ErrorCodec());
     this.addCodec(this.functionCodec);
+
+    for (const codec of codecs) {
+      this.addCodec(codec);
+    }
 
     this.disposer.add(this.transport);
 
