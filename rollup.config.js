@@ -2,9 +2,11 @@
 
 const { resolve } = require('path');
 
+const RollupPluginTypescript = require('@wessberg/rollup-plugin-ts');
 const RollupPluginNodeResolve = require('rollup-plugin-node-resolve');
 const RollupPluginCommonJs = require('rollup-plugin-commonjs');
-const RollupPluginTypescript = require('@wessberg/rollup-plugin-ts');
+const { terser } = require('rollup-plugin-terser');
+const Typescript = require('typescript');
 
 const pkg = require('./package.json');
 
@@ -15,14 +17,23 @@ module.exports = [
       {
         name: 'Velcro',
         extend: true,
-        file: resolve(__dirname, pkg.browser),
+        file: resolve(__dirname, pkg.unpkg),
         format: 'umd',
       },
     ],
     plugins: [
       RollupPluginNodeResolve({ extensions: ['.mjs', '.js'] }),
       RollupPluginCommonJs(),
-      RollupPluginTypescript({}),
+      RollupPluginTypescript({
+        tsconfig: {
+          target: Typescript.ScriptTarget.ES2015,
+        },
+      }),
+      terser({
+        mangle: {
+          reserved: ['Velcro'],
+        },
+      }),
     ],
   },
   {
@@ -30,6 +41,11 @@ module.exports = [
     output: [
       {
         file: resolve(__dirname, pkg.main),
+        format: 'cjs',
+        sourcemap: true,
+      },
+      {
+        file: resolve(__dirname, pkg.browser),
         format: 'cjs',
         sourcemap: true,
       },

@@ -4,9 +4,14 @@
   "description": "A fully-typed, transport-agnostic, bi-directional RPC framework that also supports passing functions as parameters and returning functions as results.",
   "browser": "dist/dist-browser/index.js",
   "main": "dist/dist-main/index.js",
-  "module": "dist/dist-module/index.js",
+  "module": "dist/dist-module/index.mjs",
+  "unpkg": "dist/dist-unpkg/index.min.js",
   "types": "./dist/dist-main/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "scripts": {
+    "prebuild": "rm -rf dist",
     "build": "rollup -c",
     "prepack": "npm run build",
     "preversion": "npm run build && npm run test",
@@ -31,6 +36,7 @@
     "rollup": "^1.27.4",
     "rollup-plugin-commonjs": "^10.1.0",
     "rollup-plugin-node-resolve": "^5.2.0",
+    "rollup-plugin-terser": "^5.1.2",
     "typescript": "^3.7.2"
   },
   "prettier": {
