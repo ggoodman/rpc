@@ -82,7 +82,7 @@ describe('The end to end protocol', () => {
     const leftApi = {
       doWork: async (log: (n: number) => void) => {
         for (let i = 0; i < times; i++) {
-          await log(i);
+          log(i);
         }
       },
     };

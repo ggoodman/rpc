@@ -15,7 +15,7 @@
     "build": "rollup -c",
     "prepack": "npm run build",
     "preversion": "npm run build && npm run test",
-    "test": "lab -fSv --globals globalThis --pattern **/*.ts --transform ./test/lib/typescript.js"
+    "test": "lab -fSv --globals globalThis --transform ./test/lib/typescript.js"
   },
   "keywords": [],
   "author": "Geoff Goodman <geoff@goodman.dev> (https://geoff@goodman.dev)",

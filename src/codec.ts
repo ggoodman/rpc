@@ -1,6 +1,6 @@
 import { WrappedType, WrappedError, WrappedFunction } from './types';
-
-const resolvedPromise = Promise.resolve();
+import { Thenable } from 'ts-primitives';
+import { resolvedPromise } from './constants';
 
 export interface Codec<
   TName extends string = string,
@@ -47,7 +47,7 @@ export class FunctionCodec implements Codec<'Function', (...args: any[]) => any,
     private readonly invokeRemoteAnonymousFunction: (
       anonymousFunctionId: number,
       ...args: unknown[]
-    ) => Promise<unknown>
+    ) => Thenable<unknown>
   ) {}
 
   canEncode(obj: unknown) {

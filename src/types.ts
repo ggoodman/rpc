@@ -20,7 +20,7 @@ export function isIncomingAnonymousFunctionInvocation(
     msg[0] === 0 &&
     typeof msg[1] === 'number' &&
     Number.isInteger(msg[1]) &&
-    msg[1] > 0 &&
+    msg[1] >= 0 &&
     typeof msg[2] === 'number' &&
     Number.isInteger(msg[2])
   );
