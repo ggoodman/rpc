@@ -11,6 +11,7 @@ import {
 import { Transport } from './transport';
 import { Decoder } from './decoder';
 import { Encoder } from './encoder';
+import { resolvedPromise } from './constants';
 
 type AnyFunc = (...args: any[]) => any;
 type AsyncReturnType<T> = T extends (...args: any[]) => infer U ? AsyncType<U> : never;
@@ -18,8 +19,6 @@ type AsyncType<T> = T extends AnyFunc
   ? (...args: Parameters<T>) => EnsurePromise<ReturnType<T>>
   : T;
 type EnsurePromise<T> = T extends Promise<any> ? T : Promise<T>;
-
-const resolvedPromise = Promise.resolve();
 
 export class Peer<
   TRemoteApi extends { [method: string]: (...args: any[]) => any },
@@ -64,10 +63,14 @@ export class Peer<
 
         return resolvedPromise.then(wrappedInvoke).then(
           result => {
-            this.transport.sendMessage([0, -reqId, null, this.encoder.encode(result)]);
+            if (reqId > 0) {
+              this.transport.sendMessage([0, -reqId, null, this.encoder.encode(result)]);
+            }
           },
           err => {
-            this.transport.sendMessage([0, -reqId, this.encoder.encode(err)]);
+            if (reqId > 0) {
+              this.transport.sendMessage([0, -reqId, this.encoder.encode(err)]);
+            }
           }
         );
       }
@@ -158,7 +161,7 @@ export class Peer<
     ...args: Parameters<TRemoteApi[TMethodName]>
   ) {
     const reqId = this.nextReqId++;
-    const dfd = dfdForReq<AsyncReturnType<TRemoteApi[TMethodName]>>(reqId);
+    const dfd = dfdForReq<AsyncReturnType<TRemoteApi[TMethodName]>>();
 
     this.pendingRemoteOperations.set(reqId, dfd);
 
@@ -169,14 +172,31 @@ export class Peer<
   }
 
   private invokeAnonymous(anonymousFunctionId: number, ...args: unknown[]) {
-    const reqId = this.nextReqId++;
-    const dfd = dfdForReq<unknown>(reqId);
+    let dfd: ReturnType<typeof dfdForReq> | undefined = undefined;
+    let reqId = 0;
 
-    this.pendingRemoteOperations.set(reqId, dfd);
+    // Here we need to schedule some work to run at the END of the next loop through the microtask queue.
+    // In order to make that happen, we will nest our logic into a double wait on a resolved promise.
+    resolvedPromise.then(() =>
+      resolvedPromise.then(() => {
+        const mappedArgs = args.map(arg => this.encoder.encode(arg));
+        this.transport.sendMessage([0, anonymousFunctionId, reqId, ...mappedArgs]);
+      })
+    );
 
-    const mappedArgs = args.map(arg => this.encoder.encode(arg));
-    this.transport.sendMessage([0, anonymousFunctionId, reqId, ...mappedArgs]);
+    // We will return a thenable and defer the execution of this function to the end of the microtick queue.
+    // If the thenable is subscribed to by then, we'll return a promise and execute the request such that
+    // we request an execution receipt. Otherwise, we will execute the request in such a way that the remote
+    // peer won't attempt to respond with an execution receipt.
+    return {
+      then: (resolve: (result: any) => any) => {
+        reqId = this.nextReqId++;
+        dfd = dfdForReq<unknown>();
 
-    return dfd.promise;
+        this.pendingRemoteOperations.set(reqId, dfd);
+
+        return resolve(dfd.promise);
+      },
+    };
   }
 }

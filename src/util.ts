@@ -1,8 +1,7 @@
-export function dfdForReq<T>(reqId: number) {
+export function dfdForReq<T>() {
   let settled = false;
 
   const op = {
-    reqId,
     resolve: (undefined as unknown) as (result: any) => void,
     reject: (undefined as unknown) as (err: Error) => void,
     promise: (undefined as unknown) as Promise<T>,
