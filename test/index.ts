@@ -197,4 +197,70 @@ describe('The end to end protocol', () => {
 
     expect(await invokePromise).to.be.undefined();
   });
+
+  it('will throw an error if the lazy execution receipt api is misused on invocations', async (flags: script.Flags) => {
+    const disposable = new DisposableStore();
+    flags.onCleanup = () => disposable.dispose();
+
+    const bridge = new TransportBridge();
+    disposable.add(bridge);
+
+    const leftApi = {
+      ping: (value: any) => {
+        return value;
+      },
+    };
+
+    const left = expose(leftApi).connect(bridge.left);
+    const right = connect<typeof leftApi>(bridge.right);
+    disposable.add(left);
+    disposable.add(right);
+
+    const ret = right.invoke('ping', 'pong');
+    const invalidLazyPromise = new Promise(resolve =>
+      setImmediate(() => {
+        resolve(ret);
+      })
+    );
+
+    await expect(invalidLazyPromise).to.reject(TypeError, /delivery receipt/);
+  });
+
+  it('will throw an error if the lazy execution receipt api is misused on anonymous function invocations', async (flags: script.Flags) => {
+    const disposable = new DisposableStore();
+    flags.onCleanup = () => disposable.dispose();
+
+    const bridge = new TransportBridge();
+    disposable.add(bridge);
+
+    const leftApi = {
+      ping: async <T>(value: T, cb: (err: null, value: T) => void) => {
+        const ret = cb(null, value);
+
+        await new Promise(resolve =>
+          setImmediate(
+            flags.mustCall(() => {
+              resolve(ret);
+            }, 1)
+          )
+        );
+      },
+    };
+
+    const left = expose(leftApi).connect(bridge.left);
+    const right = connect<typeof leftApi>(bridge.right);
+    disposable.add(left);
+    disposable.add(right);
+
+    const ret = right.invoke(
+      'ping',
+      'pong',
+      flags.mustCall((err, value) => {
+        expect(err).to.be.null();
+        expect(value).to.equal('pong');
+      }, 1)
+    );
+
+    await expect(ret).to.reject(Error, /delivery receipt/);
+  });
 });
