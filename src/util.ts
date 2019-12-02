@@ -1,4 +1,12 @@
-export function dfdForReq<T>() {
+import { Thenable } from 'ts-primitives';
+
+export interface Deferred<T> {
+  resolve(result: T | Promise<T> | Thenable<T>): void;
+  reject(err: Error): void;
+  promise: Promise<T>;
+}
+
+export function createDeferred<T>(): Deferred<T> {
   let settled = false;
 
   const op = {
@@ -23,4 +31,10 @@ export function dfdForReq<T>() {
   });
 
   return op;
+}
+
+export function thenableAlreadySettled() {
+  throw new TypeError(
+    'Attempted to wait on the outcome of an rpc request after it was sent without requesting a delivery receipt'
+  );
 }
