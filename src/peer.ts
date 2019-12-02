@@ -1,6 +1,6 @@
-import { DisposableStore } from 'ts-primitives';
+import { DisposableStore, Thenable } from 'ts-primitives';
 
-import { dfdForReq } from './util';
+import { createDeferred, thenableAlreadySettled, Deferred } from './util';
 import { Codec, ErrorCodec, FunctionCodec } from './codec';
 import {
   isIncomingAnonymousFunctionInvocation,
@@ -19,6 +19,7 @@ type AsyncType<T> = T extends AnyFunc
   ? (...args: Parameters<T>) => EnsurePromise<ReturnType<T>>
   : T;
 type EnsurePromise<T> = T extends Promise<any> ? T : Promise<T>;
+type UnwrapPromise<T> = T extends Promise<infer U> ? U : T;
 
 export class Peer<
   TRemoteApi extends { [method: string]: (...args: any[]) => any },
@@ -30,7 +31,7 @@ export class Peer<
   private readonly decoder = new Decoder(this.codecs);
   private readonly encoder = new Encoder(this.codecs);
   private nextReqId = 1;
-  private readonly pendingRemoteOperations = new Map<number, ReturnType<typeof dfdForReq>>();
+  private readonly pendingRemoteOperations = new Map<number, Deferred<unknown>>();
 
   constructor(
     private readonly transport: Transport,
@@ -159,44 +160,65 @@ export class Peer<
   invoke<TMethodName extends keyof TRemoteApi>(
     method: TMethodName,
     ...args: Parameters<TRemoteApi[TMethodName]>
-  ) {
-    const reqId = this.nextReqId++;
-    const dfd = dfdForReq<AsyncReturnType<TRemoteApi[TMethodName]>>();
-
-    this.pendingRemoteOperations.set(reqId, dfd);
-
-    const mappedArgs = args.map(arg => this.encoder.encode(arg));
-    this.transport.sendMessage([reqId, method, ...mappedArgs]);
-
-    return dfd.promise as EnsurePromise<AsyncReturnType<TRemoteApi[TMethodName]>>;
-  }
-
-  private invokeAnonymous(anonymousFunctionId: number, ...args: unknown[]) {
-    let dfd: ReturnType<typeof dfdForReq> | undefined = undefined;
+  ): Thenable<UnwrapPromise<ReturnType<TRemoteApi[TMethodName]>>> {
     let reqId = 0;
+    let dfd: Deferred<UnwrapPromise<ReturnType<TRemoteApi[TMethodName]>>> | undefined = undefined;
 
-    // Here we need to schedule some work to run at the END of the next loop through the microtask queue.
-    // In order to make that happen, we will nest our logic into a double wait on a resolved promise.
+    const thenable: Thenable<UnwrapPromise<ReturnType<TRemoteApi[TMethodName]>>> = {
+      then: (
+        ...args: Parameters<Thenable<UnwrapPromise<ReturnType<TRemoteApi[TMethodName]>>>['then']>
+      ) => {
+        reqId = this.nextReqId++;
+        dfd = createDeferred<UnwrapPromise<ReturnType<TRemoteApi[TMethodName]>>>();
+
+        this.pendingRemoteOperations.set(reqId, dfd);
+
+        return dfd.promise.then(...args);
+      },
+    };
+
     resolvedPromise.then(() =>
       resolvedPromise.then(() => {
+        thenable.then = thenableAlreadySettled as any;
+
         const mappedArgs = args.map(arg => this.encoder.encode(arg));
-        this.transport.sendMessage([0, anonymousFunctionId, reqId, ...mappedArgs]);
+        this.transport.sendMessage([reqId, method, ...mappedArgs]);
       })
     );
+
+    return thenable;
+  }
+
+  private invokeAnonymous(anonymousFunctionId: number, ...args: unknown[]): Thenable<unknown> {
+    let reqId = 0;
+    let dfd: Deferred<unknown> | undefined = undefined;
 
     // We will return a thenable and defer the execution of this function to the end of the microtick queue.
     // If the thenable is subscribed to by then, we'll return a promise and execute the request such that
     // we request an execution receipt. Otherwise, we will execute the request in such a way that the remote
     // peer won't attempt to respond with an execution receipt.
-    return {
-      then: (resolve: (result: any) => any) => {
+    const thenable: Thenable<unknown> = {
+      then: (...args: Parameters<Thenable<unknown>['then']>) => {
         reqId = this.nextReqId++;
-        dfd = dfdForReq<unknown>();
+        dfd = createDeferred();
 
         this.pendingRemoteOperations.set(reqId, dfd);
 
-        return resolve(dfd.promise);
+        return dfd.promise.then(...args);
       },
     };
+
+    // Here we need to schedule some work to run at the END of the next loop through the microtask queue.
+    // In order to make that happen, we will nest our logic into a double wait on a resolved promise.
+    resolvedPromise.then(() =>
+      resolvedPromise.then(() => {
+        thenable.then = thenableAlreadySettled as any;
+
+        const mappedArgs = args.map(arg => this.encoder.encode(arg));
+        this.transport.sendMessage([0, anonymousFunctionId, reqId, ...mappedArgs]);
+      })
+    );
+
+    return thenable;
   }
 }
