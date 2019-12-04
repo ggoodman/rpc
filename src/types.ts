@@ -1,6 +1,4 @@
-export type AnonymousFunctionInvocation = [0, number, number, ...unknown[]];
-export type AnonymousFunctionResponse = [0, number, null | WrappedError, unknown[]];
-export type InvocationMessage = [number, string, ...unknown[]];
+export type InvocationMessage = [number, string | number, ...unknown[]];
 export type ResponseMessage = [number, null | WrappedError, unknown];
 export type WrappedType<T extends string> = { $: T };
 
@@ -13,35 +11,16 @@ export interface WrappedFunction extends WrappedType<'Function'> {
   id: number;
 }
 
-export function isIncomingAnonymousFunctionInvocation(
-  msg: unknown[]
-): msg is AnonymousFunctionInvocation {
-  return (
-    msg[0] === 0 &&
-    typeof msg[1] === 'number' &&
-    Number.isInteger(msg[1]) &&
-    msg[1] >= 0 &&
-    typeof msg[2] === 'number' &&
-    Number.isInteger(msg[2])
-  );
-}
-
-export function isIncomingAnonymousFunctionResponse(
-  msg: unknown[]
-): msg is AnonymousFunctionResponse {
-  return (
-    msg[0] === 0 &&
-    typeof msg[1] === 'number' &&
-    Number.isInteger(msg[1]) &&
-    msg[1] < 0 &&
-    (msg[2] === null || isWrappedError(msg[2]))
-  );
-}
-
 export function isIncomingInvocationMessage(msg: unknown[]): msg is InvocationMessage {
   const [id, methodName] = msg;
 
-  return typeof id === 'number' && Number.isInteger(id) && id > 0 && typeof methodName === 'string';
+  return (
+    typeof id === 'number' &&
+    Number.isInteger(id) &&
+    id >= 0 &&
+    (typeof methodName === 'string' ||
+      (typeof methodName === 'number' && Number.isInteger(methodName) && methodName > 0))
+  );
 }
 
 export function isIncomingResponseMessage(msg: unknown[]): msg is ResponseMessage {
@@ -74,13 +53,3 @@ export function isWrappedTypeOfKind<T extends string>(
 ): obj is WrappedType<T> {
   return isWrappedType(obj) && obj.$ === type;
 }
-
-type Primitive = string | number | boolean | null | undefined | void;
-type ExposedFunction<
-  T extends (...args: any[]) => any,
-  TArgs = Parameters<T>,
-  TReturn = ReturnType<T>
-> = TArgs extends Primitive[] ? (TReturn extends Primitive ? T : never) : never;
-
-type Test = (n: number) => number;
-type Result = ExposedFunction<Test>;

@@ -2,34 +2,25 @@ import { DisposableStore, Thenable } from 'ts-primitives';
 
 import { createDeferred, thenableAlreadySettled, Deferred } from './util';
 import { Codec, ErrorCodec, FunctionCodec } from './codec';
-import {
-  isIncomingAnonymousFunctionInvocation,
-  isIncomingInvocationMessage,
-  isIncomingResponseMessage,
-  isIncomingAnonymousFunctionResponse,
-} from './types';
+import { isIncomingInvocationMessage, isIncomingResponseMessage } from './types';
 import { Transport } from './transport';
 import { Decoder } from './decoder';
 import { Encoder } from './encoder';
 import { resolvedPromise } from './constants';
 
-type AnyFunc = (...args: any[]) => any;
-type AsyncReturnType<T> = T extends (...args: any[]) => infer U ? AsyncType<U> : never;
-type AsyncType<T> = T extends AnyFunc
-  ? (...args: Parameters<T>) => EnsurePromise<ReturnType<T>>
-  : T;
-type EnsurePromise<T> = T extends Promise<any> ? T : Promise<T>;
 type UnwrapPromise<T> = T extends Promise<infer U> ? U : T;
 
 export class Peer<
   TRemoteApi extends { [method: string]: (...args: any[]) => any },
   TLocalApi extends { [method: string]: (...args: any[]) => any } | undefined = undefined
 > {
+  private readonly anonymousFunctions = new Map<number, (...args: any[]) => any>();
   private readonly functionCodec: FunctionCodec;
   private readonly codecs = new Map<string, Codec>();
   private readonly disposer = new DisposableStore();
   private readonly decoder = new Decoder(this.codecs);
   private readonly encoder = new Encoder(this.codecs);
+  private nextAnonymousFunctionId = 1;
   private nextReqId = 1;
   private readonly pendingRemoteOperations = new Map<number, Deferred<unknown>>();
 
@@ -38,7 +29,10 @@ export class Peer<
     private readonly localApi?: TLocalApi,
     codecs: Codec[] = []
   ) {
-    this.functionCodec = new FunctionCodec(this.invokeAnonymous.bind(this));
+    this.functionCodec = new FunctionCodec(
+      this.registerAnonymousFunction.bind(this),
+      this.invokeWithOptionalCompletionReceipt.bind(this)
+    );
 
     this.addCodec(new ErrorCodec());
     this.addCodec(this.functionCodec);
@@ -50,62 +44,36 @@ export class Peer<
     this.disposer.add(this.transport);
 
     this.transport.onMessage(msg => {
-      // This is a message comign from the peer to call a local anonymous function.
-      // A local anonymous function would have been created by the function codec when
-      // a function was passed as an argument to another invocation.
-      if (isIncomingAnonymousFunctionInvocation(msg)) {
-        const [, id, reqId, ...args] = msg;
-
-        const wrappedInvoke = () => {
-          const mappedArgs = args.map(arg => this.decoder.decode(arg));
-
-          return this.functionCodec.invokeAnonymousFunction(id, ...mappedArgs);
-        };
-
-        return resolvedPromise.then(wrappedInvoke).then(
-          result => {
-            if (reqId > 0) {
-              this.transport.sendMessage([0, -reqId, null, this.encoder.encode(result)]);
-            }
-          },
-          err => {
-            if (reqId > 0) {
-              this.transport.sendMessage([0, -reqId, this.encoder.encode(err)]);
-            }
-          }
-        );
-      }
-
-      if (isIncomingAnonymousFunctionResponse(msg)) {
-        const [, reqId, err, result] = msg;
-        const dfd = this.pendingRemoteOperations.get(-reqId);
-
-        if (!dfd) {
-          throw new TypeError(`Received a function response for an unknown function ${reqId}`);
-        }
-
-        this.pendingRemoteOperations.delete(-reqId);
-
-        if (err) {
-          return dfd.reject(this.decoder.decode(err) as Error);
-        }
-
-        return dfd.resolve(this.decoder.decode(result));
-      }
-
-      // This is a request coming from the peer to call a method on the local API
+      // This is a request coming from the peer to call a function on the local API
       if (isIncomingInvocationMessage(msg)) {
-        const [id, methodName, ...args] = msg;
+        const [reqId, methodNameOrAnonymousFunctionId, ...args] = msg;
 
         const wrappedInvoke = () => {
-          if (!this.localApi) {
-            throw new TypeError('Unable to invoke method when no remote api has been defined');
-          }
+          let localMethod: (...args: any) => any;
 
-          const localMethod = this.localApi[methodName];
+          if (typeof methodNameOrAnonymousFunctionId === 'number') {
+            const anonymousFunction = this.anonymousFunctions.get(methodNameOrAnonymousFunctionId);
 
-          if (!localMethod) {
-            throw new TypeError(`No such local method ${methodName}`);
+            /* $lab:coverage:off$ */
+            if (!anonymousFunction) {
+              throw new TypeError(
+                `Unable to invoke unknown anonymous function '${methodNameOrAnonymousFunctionId}'`
+              );
+            }
+
+            localMethod = anonymousFunction;
+          } else {
+            if (!this.localApi) {
+              throw new TypeError('Unable to invoke method when no remote api has been defined');
+            }
+
+            const namedFunction = this.localApi[methodNameOrAnonymousFunctionId];
+
+            if (!namedFunction) {
+              throw new TypeError(`No such local method '${methodNameOrAnonymousFunctionId}'`);
+            }
+
+            localMethod = namedFunction;
           }
 
           const mappedArgs = args.map(arg => this.decoder.decode(arg));
@@ -115,10 +83,16 @@ export class Peer<
 
         return void resolvedPromise.then(wrappedInvoke).then(
           result => {
-            this.transport.sendMessage([-id, null, this.encoder.encode(result)]);
+            if (reqId > 0) {
+              this.transport.sendMessage([-reqId, null, this.encoder.encode(result)]);
+            }
           },
           err => {
-            this.transport.sendMessage([-id, this.encoder.encode(err)]);
+            if (reqId > 0) {
+              this.transport.sendMessage([-reqId, this.encoder.encode(err)]);
+            } else {
+              throw err;
+            }
           }
         );
       }
@@ -161,44 +135,24 @@ export class Peer<
     method: TMethodName,
     ...args: Parameters<TRemoteApi[TMethodName]>
   ): Thenable<UnwrapPromise<ReturnType<TRemoteApi[TMethodName]>>> {
-    let reqId = 0;
-    let dfd: Deferred<UnwrapPromise<ReturnType<TRemoteApi[TMethodName]>>> | undefined = undefined;
-
-    const thenable: Thenable<UnwrapPromise<ReturnType<TRemoteApi[TMethodName]>>> = {
-      then: (
-        ...args: Parameters<Thenable<UnwrapPromise<ReturnType<TRemoteApi[TMethodName]>>>['then']>
-      ) => {
-        reqId = this.nextReqId++;
-        dfd = createDeferred<UnwrapPromise<ReturnType<TRemoteApi[TMethodName]>>>();
-
-        this.pendingRemoteOperations.set(reqId, dfd);
-
-        return dfd.promise.then(...args);
-      },
-    };
-
-    resolvedPromise.then(() =>
-      resolvedPromise.then(() => {
-        thenable.then = thenableAlreadySettled as any;
-
-        const mappedArgs = args.map(arg => this.encoder.encode(arg));
-        this.transport.sendMessage([reqId, method, ...mappedArgs]);
-      })
-    );
-
-    return thenable;
+    return this.invokeWithOptionalCompletionReceipt<
+      UnwrapPromise<ReturnType<TRemoteApi[TMethodName]>>
+    >(method as string, ...args);
   }
 
-  private invokeAnonymous(anonymousFunctionId: number, ...args: unknown[]): Thenable<unknown> {
+  private invokeWithOptionalCompletionReceipt<T>(
+    methodOrAnonymousFunctionId: number | string,
+    ...args: any[]
+  ): Thenable<T> {
     let reqId = 0;
-    let dfd: Deferred<unknown> | undefined = undefined;
+    let dfd: Deferred<T> | undefined = undefined;
 
     // We will return a thenable and defer the execution of this function to the end of the microtick queue.
     // If the thenable is subscribed to by then, we'll return a promise and execute the request such that
     // we request an execution receipt. Otherwise, we will execute the request in such a way that the remote
     // peer won't attempt to respond with an execution receipt.
-    const thenable: Thenable<unknown> = {
-      then: (...args: Parameters<Thenable<unknown>['then']>) => {
+    const thenable: Thenable<T> = {
+      then: (...args: Parameters<Thenable<T>['then']>) => {
         reqId = this.nextReqId++;
         dfd = createDeferred();
 
@@ -215,10 +169,18 @@ export class Peer<
         thenable.then = thenableAlreadySettled as any;
 
         const mappedArgs = args.map(arg => this.encoder.encode(arg));
-        this.transport.sendMessage([0, anonymousFunctionId, reqId, ...mappedArgs]);
+        this.transport.sendMessage([reqId, methodOrAnonymousFunctionId, ...mappedArgs]);
       })
     );
 
     return thenable;
+  }
+
+  private registerAnonymousFunction(fn: (...args: any[]) => any) {
+    const id = this.nextAnonymousFunctionId++;
+
+    this.anonymousFunctions.set(id, fn);
+
+    return id;
   }
 }

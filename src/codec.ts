@@ -40,10 +40,8 @@ export class ErrorCodec implements Codec<'Error', Error, WrappedError> {
 export class FunctionCodec implements Codec<'Function', (...args: any[]) => any, WrappedFunction> {
   readonly name = 'Function';
 
-  private readonly _anonymousFunctions = new Map<number, (...args: any[]) => any>();
-  private _nextReqId = 1;
-
   constructor(
+    private readonly registerAnonymousFunction: (fn: (...args: any[]) => any) => number,
     private readonly invokeRemoteAnonymousFunction: (
       anonymousFunctionId: number,
       ...args: unknown[]
@@ -54,13 +52,11 @@ export class FunctionCodec implements Codec<'Function', (...args: any[]) => any,
     return typeof obj === 'function';
   }
 
-  encode(obj: (...args: any[]) => any): WrappedFunction {
-    const anonymousFunctionId = this._nextReqId++;
-
-    this._anonymousFunctions.set(anonymousFunctionId, obj);
+  encode(fn: (...args: any[]) => any): WrappedFunction {
+    const anonymousFunctionId = this.registerAnonymousFunction(fn);
 
     return {
-      $: 'Function',
+      $: this.name,
       id: anonymousFunctionId,
     };
   }
@@ -73,20 +69,5 @@ export class FunctionCodec implements Codec<'Function', (...args: any[]) => any,
     };
   }
 
-  dispose() {
-    this._anonymousFunctions.clear();
-  }
-
-  invokeAnonymousFunction(id: number, ...args: unknown[]) {
-    return resolvedPromise.then(() => {
-      const anonymousFunction = this._anonymousFunctions.get(id);
-
-      /* $lab:coverage:off$ */
-      if (!anonymousFunction) {
-        throw new TypeError(`Unable to invoke unknown anonymous function ${id}`);
-      }
-
-      return anonymousFunction(...args);
-    });
-  }
+  dispose() {}
 }
