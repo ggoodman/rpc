@@ -54,12 +54,13 @@ const workerApi = {
     // Actually acquire types here. Let's pretend that this logic makes sense even though it is
     // total nonsense.
     for (const dependency in dependencies) {
-      // Here is where reality conflicts a bit with developer ergonomics. Since `onDependency` is
-      // a function whose implementation lives on another Peer, we *should* await its invocation
-      // if we want to enforce strict ordering. Otherwise, the Promise returned from the Peer's
-      // call to `acquireTypes` will likely settle before all calls to `onDependency` have
-      // completed. If fire-and-forget behaviour is acceptable, you can skip the `await` here.
-      await onDependency({
+      // onDependency is a reference to a function on the other peer (the main thread). Since
+      // we don't *use* the Thenable returned by the following function, no completion receipt
+      // will be requested and this call will behave like a fire-and-forget.
+      // If we wanted to ensure delivery, we need to `await` or otherwise invoke the `.then`
+      // method of the object returned by this function *in the current turn of the microtask
+      // queue*.
+      onDependency({
         path: `/node_modules/${dependency}/index.d.ts`,
         content: `declare module "${dependency}" {}`,
       });
