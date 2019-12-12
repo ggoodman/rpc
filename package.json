@@ -1,6 +1,6 @@
 {
   "name": "@ggoodman/rpc",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "A fully-typed, transport-agnostic, bi-directional RPC framework that also supports passing functions as parameters and returning functions as results.",
   "browser": "dist/dist-browser/index.js",
   "main": "dist/dist-main/index.js",
