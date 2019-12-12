@@ -10,7 +10,7 @@ export const lab = script();
 const { describe, it } = lab;
 
 describe('The end to end protocol', () => {
-  it('Will work', async (flags: script.Flags) => {
+  it('Includes a simple transport', async (flags: script.Flags) => {
     const disposable = new DisposableStore();
     flags.onCleanup = () => disposable.dispose();
 
@@ -41,13 +41,16 @@ describe('The end to end protocol', () => {
     const rightApi = {
       invokeRight: () => 'right' as const,
     };
-    const left = expose(leftApi).connect<typeof rightApi>(bridge.left);
-    const right = expose(rightApi).connect<typeof leftApi>(bridge.right);
-    disposable.add(left);
-    disposable.add(right);
+    const leftPeer = expose(leftApi).connect<typeof rightApi>(bridge.left);
+    const rightPeer = expose(rightApi).connect<typeof leftApi>(bridge.right);
+    disposable.add(leftPeer);
+    disposable.add(rightPeer);
 
-    expect(await left.invoke('invokeRight')).to.equal('right');
-    expect(await right.invoke('invokeLeft')).to.equal('left');
+    const invokeRight = leftPeer.remoteFunction('invokeRight');
+    const invokeLeft = rightPeer.remoteFunction('invokeLeft');
+
+    expect(await invokeRight()).to.equal('right');
+    expect(await invokeLeft()).to.equal('left');
   });
 
   it('supports returning a callable function', async (flags: script.Flags) => {
@@ -61,12 +64,12 @@ describe('The end to end protocol', () => {
       getFunction: () => flags.mustCall((n: number) => n + 1, 1),
     };
 
-    const left = expose(leftApi).connect(bridge.left);
-    const right = connect<typeof leftApi>(bridge.right);
-    disposable.add(left);
-    disposable.add(right);
+    const leftPeer = expose(leftApi).connect(bridge.left);
+    const rightPeer = connect<typeof leftApi>(bridge.right);
+    disposable.add(leftPeer);
+    disposable.add(rightPeer);
 
-    const increment = await right.invoke('getFunction');
+    const increment = await rightPeer.invoke('getFunction');
 
     expect(await increment(1)).to.equal(2);
   });
@@ -89,15 +92,15 @@ describe('The end to end protocol', () => {
 
     let counter = 0;
 
-    const left = expose(leftApi).connect(bridge.left);
-    const right = connect<typeof leftApi>(bridge.right);
-    disposable.add(left);
-    disposable.add(right);
+    const leftPeer = expose(leftApi).connect(bridge.left);
+    const rightPeer = connect<typeof leftApi>(bridge.right);
+    disposable.add(leftPeer);
+    disposable.add(rightPeer);
 
     const log = flags.mustCall((n: number) => {
       expect(n).to.equal(counter++);
     }, times);
-    await right.invoke('doWork', log);
+    await rightPeer.invoke('doWork', log);
   });
 
   it('supports catching errors', async (flags: script.Flags) => {
@@ -117,13 +120,13 @@ describe('The end to end protocol', () => {
       },
     };
 
-    const left = expose(leftApi).connect(bridge.left);
-    const right = connect<typeof leftApi>(bridge.right);
-    disposable.add(left);
-    disposable.add(right);
+    const leftPeer = expose(leftApi).connect(bridge.left);
+    const rightPeer = connect<typeof leftApi>(bridge.right);
+    disposable.add(leftPeer);
+    disposable.add(rightPeer);
 
-    await expect(await right.invoke('rollTheDice', 3)).to.equal(3);
-    await expect(right.invoke('rollTheDice', 7)).to.reject(Error, 'Craps');
+    await expect(await rightPeer.invoke('rollTheDice', 3)).to.equal(3);
+    await expect(rightPeer.invoke('rollTheDice', 7)).to.reject(Error, 'Craps');
   });
 
   it('supports the ping-pong example', async (flags: script.Flags) => {
@@ -141,13 +144,13 @@ describe('The end to end protocol', () => {
       },
     };
 
-    const left = expose(leftApi).connect(bridge.left);
-    const right = connect<typeof leftApi>(bridge.right);
-    disposable.add(left);
-    disposable.add(right);
+    const leftPeer = expose(leftApi).connect(bridge.left);
+    const rightPeer = connect<typeof leftApi>(bridge.right);
+    disposable.add(leftPeer);
+    disposable.add(rightPeer);
 
     const now = Date.now();
-    const pong = await right.invoke('ping', now);
+    const pong = await rightPeer.invoke('ping', now);
 
     expect(await pong()).to.equal(now);
   });
@@ -163,14 +166,14 @@ describe('The end to end protocol', () => {
       listEntries: (cb: (err: null | Error, entries: string[]) => void) => {
         // Ooops, while I implement this API, I can't actually fulfill it
         // but I'm connected to another Peer that _CAN_.
-        return right2.invoke('listEntries', cb);
+        return right2Peer.invoke('listEntries', cb);
       },
     };
 
-    const left1 = expose(leftApi1).connect(bridge1.left);
-    const right1 = connect<typeof leftApi1>(bridge1.right);
-    disposable.add(left1);
-    disposable.add(right1);
+    const left1Peer = expose(leftApi1).connect(bridge1.left);
+    const right1Peer = connect<typeof leftApi1>(bridge1.right);
+    disposable.add(left1Peer);
+    disposable.add(right1Peer);
 
     const bridge2 = new TransportBridge();
     disposable.add(bridge2);
@@ -182,12 +185,12 @@ describe('The end to end protocol', () => {
       },
     };
 
-    const left2 = expose(leftApi2).connect(bridge2.left);
-    const right2 = connect<typeof leftApi2>(bridge2.right);
-    disposable.add(left2);
-    disposable.add(right2);
+    const left2Peer = expose(leftApi2).connect(bridge2.left);
+    const right2Peer = connect<typeof leftApi2>(bridge2.right);
+    disposable.add(left2Peer);
+    disposable.add(right2Peer);
 
-    const invokePromise = right1.invoke(
+    const invokePromise = right1Peer.invoke(
       'listEntries',
       flags.mustCall((err: null | Error, entries: string[]) => {
         expect(err).to.be.null();
@@ -211,12 +214,12 @@ describe('The end to end protocol', () => {
       },
     };
 
-    const left = expose(leftApi).connect(bridge.left);
-    const right = connect<typeof leftApi>(bridge.right);
-    disposable.add(left);
-    disposable.add(right);
+    const leftPeer = expose(leftApi).connect(bridge.left);
+    const rightPeer = connect<typeof leftApi>(bridge.right);
+    disposable.add(leftPeer);
+    disposable.add(rightPeer);
 
-    const ret = right.invoke('ping', 'pong');
+    const ret = rightPeer.invoke('ping', 'pong');
     const invalidLazyPromise = new Promise(resolve =>
       setImmediate(() => {
         resolve(ret);
@@ -247,12 +250,12 @@ describe('The end to end protocol', () => {
       },
     };
 
-    const left = expose(leftApi).connect(bridge.left);
-    const right = connect<typeof leftApi>(bridge.right);
-    disposable.add(left);
-    disposable.add(right);
+    const leftPeer = expose(leftApi).connect(bridge.left);
+    const rightPeer = connect<typeof leftApi>(bridge.right);
+    disposable.add(leftPeer);
+    disposable.add(rightPeer);
 
-    const ret = right.invoke(
+    const ret = rightPeer.invoke(
       'ping',
       'pong',
       flags.mustCall((err, value) => {

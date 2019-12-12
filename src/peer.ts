@@ -131,6 +131,20 @@ export class Peer<
     this.disposer.dispose();
   }
 
+  remoteFunction<
+    TMethodName extends keyof TRemoteApi,
+    TFunction extends (...args: any[]) => any = TRemoteApi[TMethodName]
+  >(
+    method: TMethodName
+  ): (...args: Parameters<TFunction>) => Thenable<UnwrapPromise<ReturnType<TFunction>>> {
+    return (...args: Parameters<TFunction>) => {
+      return this.invokeWithOptionalCompletionReceipt<UnwrapPromise<ReturnType<TFunction>>>(
+        method as string,
+        ...args
+      );
+    };
+  }
+
   invoke<TMethodName extends keyof TRemoteApi>(
     method: TMethodName,
     ...args: Parameters<TRemoteApi[TMethodName]>
