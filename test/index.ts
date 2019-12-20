@@ -1,5 +1,4 @@
-import { expect } from '@hapi/code';
-import { script } from '@hapi/lab';
+import { expect, script } from '@ggoodman/ts-lab';
 import { DisposableStore, Event } from 'ts-primitives';
 
 import { TransportBridge } from './lib/testTransport';
@@ -11,12 +10,9 @@ const { describe, it } = lab;
 
 describe('The end to end protocol', () => {
   it('Includes a simple transport', async (flags: script.Flags) => {
-    const disposable = new DisposableStore();
-    flags.onCleanup = () => disposable.dispose();
-
     const bridge = new TransportBridge();
 
-    disposable.add(bridge);
+    flags.disposeOf(bridge);
 
     const message = [0, 1, 2];
     const leftMsgPromise = Event.toPromise(bridge.left.onMessage);
@@ -29,11 +25,8 @@ describe('The end to end protocol', () => {
   });
 
   it('supports bi-directional function calling', async (flags: script.Flags) => {
-    const disposable = new DisposableStore();
-    flags.onCleanup = () => disposable.dispose();
-
     const bridge = new TransportBridge();
-    disposable.add(bridge);
+    flags.disposeOf(bridge);
 
     const leftApi = {
       invokeLeft: () => 'left' as const,
@@ -43,8 +36,8 @@ describe('The end to end protocol', () => {
     };
     const leftPeer = expose(leftApi).connect<typeof rightApi>(bridge.left);
     const rightPeer = expose(rightApi).connect<typeof leftApi>(bridge.right);
-    disposable.add(leftPeer);
-    disposable.add(rightPeer);
+    flags.disposeOf(leftPeer);
+    flags.disposeOf(rightPeer);
 
     const invokeRight = leftPeer.remoteFunction('invokeRight');
     const invokeLeft = rightPeer.remoteFunction('invokeLeft');
@@ -54,11 +47,8 @@ describe('The end to end protocol', () => {
   });
 
   it('supports returning a callable function', async (flags: script.Flags) => {
-    const disposable = new DisposableStore();
-    flags.onCleanup = () => disposable.dispose();
-
     const bridge = new TransportBridge();
-    disposable.add(bridge);
+    flags.disposeOf(bridge);
 
     const leftApi = {
       getFunction: () => flags.mustCall((n: number) => n + 1, 1),
@@ -66,8 +56,8 @@ describe('The end to end protocol', () => {
 
     const leftPeer = expose(leftApi).connect(bridge.left);
     const rightPeer = connect<typeof leftApi>(bridge.right);
-    disposable.add(leftPeer);
-    disposable.add(rightPeer);
+    flags.disposeOf(leftPeer);
+    flags.disposeOf(rightPeer);
 
     const increment = await rightPeer.invoke('getFunction');
 
@@ -75,11 +65,8 @@ describe('The end to end protocol', () => {
   });
 
   it('supports passing a callable function as an argument', async (flags: script.Flags) => {
-    const disposable = new DisposableStore();
-    flags.onCleanup = () => disposable.dispose();
-
     const bridge = new TransportBridge();
-    disposable.add(bridge);
+    flags.disposeOf(bridge);
 
     const times = 5;
     const leftApi = {
@@ -94,8 +81,8 @@ describe('The end to end protocol', () => {
 
     const leftPeer = expose(leftApi).connect(bridge.left);
     const rightPeer = connect<typeof leftApi>(bridge.right);
-    disposable.add(leftPeer);
-    disposable.add(rightPeer);
+    flags.disposeOf(leftPeer);
+    flags.disposeOf(rightPeer);
 
     const log = flags.mustCall((n: number) => {
       expect(n).to.equal(counter++);
@@ -104,11 +91,8 @@ describe('The end to end protocol', () => {
   });
 
   it('supports catching errors', async (flags: script.Flags) => {
-    const disposable = new DisposableStore();
-    flags.onCleanup = () => disposable.dispose();
-
     const bridge = new TransportBridge();
-    disposable.add(bridge);
+    flags.disposeOf(bridge);
 
     const leftApi = {
       rollTheDice: (roll: number) => {
@@ -122,19 +106,16 @@ describe('The end to end protocol', () => {
 
     const leftPeer = expose(leftApi).connect(bridge.left);
     const rightPeer = connect<typeof leftApi>(bridge.right);
-    disposable.add(leftPeer);
-    disposable.add(rightPeer);
+    flags.disposeOf(leftPeer);
+    flags.disposeOf(rightPeer);
 
     await expect(await rightPeer.invoke('rollTheDice', 3)).to.equal(3);
     await expect(rightPeer.invoke('rollTheDice', 7)).to.reject(Error, 'Craps');
   });
 
   it('supports the ping-pong example', async (flags: script.Flags) => {
-    const disposable = new DisposableStore();
-    flags.onCleanup = () => disposable.dispose();
-
     const bridge = new TransportBridge();
-    disposable.add(bridge);
+    flags.disposeOf(bridge);
 
     const leftApi = {
       ping: (value: number) => {
@@ -146,8 +127,8 @@ describe('The end to end protocol', () => {
 
     const leftPeer = expose(leftApi).connect(bridge.left);
     const rightPeer = connect<typeof leftApi>(bridge.right);
-    disposable.add(leftPeer);
-    disposable.add(rightPeer);
+    flags.disposeOf(leftPeer);
+    flags.disposeOf(rightPeer);
 
     const now = Date.now();
     const pong = await rightPeer.invoke('ping', now);
@@ -156,11 +137,8 @@ describe('The end to end protocol', () => {
   });
 
   it('supports invoking methods on one peer through another peer', async (flags: script.Flags) => {
-    const disposable = new DisposableStore();
-    flags.onCleanup = () => disposable.dispose();
-
     const bridge1 = new TransportBridge();
-    disposable.add(bridge1);
+    flags.disposeOf(bridge1);
 
     const leftApi1 = {
       listEntries: (cb: (err: null | Error, entries: string[]) => void) => {
@@ -172,11 +150,11 @@ describe('The end to end protocol', () => {
 
     const left1Peer = expose(leftApi1).connect(bridge1.left);
     const right1Peer = connect<typeof leftApi1>(bridge1.right);
-    disposable.add(left1Peer);
-    disposable.add(right1Peer);
+    flags.disposeOf(left1Peer);
+    flags.disposeOf(right1Peer);
 
     const bridge2 = new TransportBridge();
-    disposable.add(bridge2);
+    flags.disposeOf(bridge2);
 
     const leftApi2 = {
       listEntries: (cb: (err: null | Error, entries: string[]) => void) => {
@@ -187,8 +165,8 @@ describe('The end to end protocol', () => {
 
     const left2Peer = expose(leftApi2).connect(bridge2.left);
     const right2Peer = connect<typeof leftApi2>(bridge2.right);
-    disposable.add(left2Peer);
-    disposable.add(right2Peer);
+    flags.disposeOf(left2Peer);
+    flags.disposeOf(right2Peer);
 
     const invokePromise = right1Peer.invoke(
       'listEntries',
@@ -202,11 +180,8 @@ describe('The end to end protocol', () => {
   });
 
   it('will throw an error if the lazy execution receipt api is misused on invocations', async (flags: script.Flags) => {
-    const disposable = new DisposableStore();
-    flags.onCleanup = () => disposable.dispose();
-
     const bridge = new TransportBridge();
-    disposable.add(bridge);
+    flags.disposeOf(bridge);
 
     const leftApi = {
       ping: (value: any) => {
@@ -216,8 +191,8 @@ describe('The end to end protocol', () => {
 
     const leftPeer = expose(leftApi).connect(bridge.left);
     const rightPeer = connect<typeof leftApi>(bridge.right);
-    disposable.add(leftPeer);
-    disposable.add(rightPeer);
+    flags.disposeOf(leftPeer);
+    flags.disposeOf(rightPeer);
 
     const ret = rightPeer.invoke('ping', 'pong');
     const invalidLazyPromise = new Promise(resolve =>
@@ -230,11 +205,8 @@ describe('The end to end protocol', () => {
   });
 
   it('will throw an error if the lazy execution receipt api is misused on anonymous function invocations', async (flags: script.Flags) => {
-    const disposable = new DisposableStore();
-    flags.onCleanup = () => disposable.dispose();
-
     const bridge = new TransportBridge();
-    disposable.add(bridge);
+    flags.disposeOf(bridge);
 
     const leftApi = {
       ping: async <T>(value: T, cb: (err: null, value: T) => void) => {
@@ -252,8 +224,8 @@ describe('The end to end protocol', () => {
 
     const leftPeer = expose(leftApi).connect(bridge.left);
     const rightPeer = connect<typeof leftApi>(bridge.right);
-    disposable.add(leftPeer);
-    disposable.add(rightPeer);
+    flags.disposeOf(leftPeer);
+    flags.disposeOf(rightPeer);
 
     const ret = rightPeer.invoke(
       'ping',

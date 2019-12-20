@@ -15,7 +15,7 @@
     "build": "rollup -c",
     "prepack": "npm run build",
     "preversion": "npm run build && npm run test",
-    "test": "lab -fSv --globals globalThis --transform ./test/lib/typescript.js"
+    "test": "ts-lab -fSv"
   },
   "keywords": [],
   "author": "Geoff Goodman <geoff@goodman.dev> (https://geoff@goodman.dev)",
@@ -29,15 +29,14 @@
     "ts-primitives": "^1.1.0"
   },
   "devDependencies": {
-    "@hapi/code": "^7.0.0",
-    "@hapi/lab": "^21.0.0",
+    "@ggoodman/ts-lab": "^1.0.1",
     "@wessberg/rollup-plugin-ts": "^1.1.80",
     "prettier": "^1.19.1",
     "rollup": "^1.27.4",
     "rollup-plugin-commonjs": "^10.1.0",
     "rollup-plugin-node-resolve": "^5.2.0",
     "rollup-plugin-terser": "^5.1.2",
-    "typescript": "^3.7.2"
+    "typescript": "^3.7.3"
   },
   "prettier": {
     "printWidth": 100,

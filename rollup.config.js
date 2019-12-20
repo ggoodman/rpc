@@ -1,5 +1,6 @@
 'use strict';
 
+const { builtinModules } = require('module');
 const { resolve } = require('path');
 
 const RollupPluginTypescript = require('@wessberg/rollup-plugin-ts');
@@ -55,7 +56,7 @@ module.exports = [
         sourcemap: true,
       },
     ],
-    external: [...Object.keys(pkg.dependencies)],
+    external: [...Object.keys(pkg.dependencies), ...builtinModules],
     plugins: [RollupPluginTypescript({})],
   },
 ];
