@@ -21,7 +21,7 @@ describe('The end to end protocol', () => {
 
     const receivedMessage = await leftMsgPromise;
 
-    expect(receivedMessage).to.equal(message);
+    expect(receivedMessage.data).to.equal(message);
   });
 
   it('supports bi-directional function calling', async (flags: script.Flags) => {

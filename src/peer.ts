@@ -43,10 +43,12 @@ export class Peer<
 
     this.disposer.add(this.transport);
 
-    this.transport.onMessage(msg => {
+    this.transport.onMessage(({ data, sendMessage }) => {
+      const boundSendMessage = sendMessage;
+
       // This is a request coming from the peer to call a function on the local API
-      if (isIncomingInvocationMessage(msg)) {
-        const [reqId, methodNameOrAnonymousFunctionId, ...args] = msg;
+      if (isIncomingInvocationMessage(data)) {
+        const [reqId, methodNameOrAnonymousFunctionId, ...args] = data;
 
         const wrappedInvoke = () => {
           let localMethod: (...args: any) => any;
@@ -84,12 +86,12 @@ export class Peer<
         return void resolvedPromise.then(wrappedInvoke).then(
           result => {
             if (reqId > 0) {
-              this.transport.sendMessage([-reqId, null, this.encoder.encode(result)]);
+              boundSendMessage([-reqId, null, this.encoder.encode(result)]);
             }
           },
           err => {
             if (reqId > 0) {
-              this.transport.sendMessage([-reqId, this.encoder.encode(err)]);
+              boundSendMessage([-reqId, this.encoder.encode(err)]);
             } else {
               throw err;
             }
@@ -98,8 +100,8 @@ export class Peer<
       }
 
       // This is an incoming message the contains the outcome of a previous invocation.
-      if (isIncomingResponseMessage(msg)) {
-        const [id, err, result] = msg;
+      if (isIncomingResponseMessage(data)) {
+        const [id, err, result] = data;
         const dfd = this.pendingRemoteOperations.get(-id);
 
         if (!dfd) {
