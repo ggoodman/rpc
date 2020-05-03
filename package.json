@@ -10,6 +10,9 @@
   "files": [
     "dist"
   ],
+  "engines": {
+    "node": ">=10.13.0"
+  },
   "scripts": {
     "prebuild": "rm -rf dist",
     "build": "rollup -c",

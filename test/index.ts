@@ -6,7 +6,7 @@ import * as ZeroMQ from 'zeromq';
 
 import { TransportBridge } from './lib/testTransport';
 import { connect, expose } from '../src';
-import { ZeroMQSocketTransport } from './lib/zeromqTransport';
+import { ZeroMQSocketTransport } from './lib/zmqTransport';
 
 export const lab = script();
 
