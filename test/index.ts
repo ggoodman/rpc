@@ -115,7 +115,7 @@ describe('The end to end protocol', () => {
       flags.disposeOf(peer);
     }
 
-    for (let j = 0; j < 4000; j++) {
+    for (let j = 0; j < 100; j++) {
       expect(await client.invoke('add', j, j)).to.equal(j + j);
     }
   });
