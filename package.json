@@ -32,7 +32,7 @@
     "ts-primitives": "^1.1.0"
   },
   "devDependencies": {
-    "@ggoodman/ts-lab": "^1.0.2",
+    "@ggoodman/ts-lab": "^1.0.3",
     "@wessberg/rollup-plugin-ts": "^1.2.24",
     "prettier": "^1.19.1",
     "rollup": "^2.7.6",
