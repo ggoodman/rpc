@@ -1,8 +1,12 @@
+import { Worker } from 'worker_threads';
+
 import { expect, script } from '@ggoodman/ts-lab';
-import { DisposableStore, Event } from 'ts-primitives';
+import { Event } from 'ts-primitives';
+import * as ZeroMQ from 'zeromq';
 
 import { TransportBridge } from './lib/testTransport';
 import { connect, expose } from '../src';
+import { ZeroMQSocketTransport } from './lib/zeroMQTransport';
 
 export const lab = script();
 
@@ -88,6 +92,32 @@ describe('The end to end protocol', () => {
       expect(n).to.equal(counter++);
     }, times);
     await rightPeer.invoke('doWork', log);
+  });
+
+  it('supports load balancing between multiple workers', async (flags: script.Flags) => {
+    const workerApi = {
+      add: (a: number, b: number) => a + b,
+    };
+
+    const dealer = new ZeroMQ.Dealer();
+    await dealer.bind('inproc://load_balancing');
+
+    const clientTransport = new ZeroMQSocketTransport(dealer);
+    const client = connect<typeof workerApi>(clientTransport);
+    flags.disposeOf(client);
+
+    for (let i = 0; i < 10; i++) {
+      const socket = new ZeroMQ.Router();
+      socket.routingId = `worker-${i}`;
+      socket.connect('inproc://load_balancing');
+      const transport = new ZeroMQSocketTransport(socket);
+      const peer = expose(workerApi).connect(transport);
+      flags.disposeOf(peer);
+    }
+
+    for (let j = 0; j < 4000; j++) {
+      expect(await client.invoke('add', j, j)).to.equal(j + j);
+    }
   });
 
   it('supports catching errors', async (flags: script.Flags) => {

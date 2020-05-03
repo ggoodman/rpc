@@ -73,3 +73,30 @@ export class TransportBridge {
 
   private static nextId = 0;
 }
+
+export class TransportFanout {
+  private readonly id = TransportFanout.nextId++;
+  private readonly leftHandlers = [] as ((msg: {
+    data: unknown[];
+    sendMessage: (msg: unknown[]) => void;
+  }) => void)[];
+  private readonly rightHandlers = [] as ((msg: {
+    data: unknown[];
+    sendMessage: (msg: unknown[]) => void;
+  }) => void)[];
+
+  public readonly left = new MockChannel(this.leftHandlers, this.rightHandlers);
+  public readonly right = new MockChannel(this.rightHandlers, this.leftHandlers);
+
+  constructor() {
+    this.left.onMessage(msg => console.debug(`[R${this.id} -> L${this.id}]`, ...msg.data));
+    this.right.onMessage(msg => console.debug(`[L${this.id} -> R${this.id}]`, ...msg.data));
+  }
+
+  dispose() {
+    this.left.dispose();
+    this.right.dispose();
+  }
+
+  private static nextId = 0;
+}

@@ -1,10 +1,11 @@
 import { Codec } from './codec';
-import { isWrappedType, isWrappedTypeOfKind } from './types';
+import { isWrappedType, isWrappedTypeOfKind } from './messages';
+import { SendMessageFunction } from './transport';
 
 export class Decoder {
   constructor(private readonly codecs: Map<string, Codec>) {}
 
-  decode(value: unknown): unknown {
+  decode(value: unknown, ctx: { sendMessage: SendMessageFunction }): unknown {
     switch (typeof value) {
       case 'string':
       case 'number':
@@ -29,7 +30,7 @@ export class Decoder {
         );
       }
 
-      return codec.decode(value);
+      return codec.decode(value, ctx);
     }
 
     // if (Array.isArray(value)) {

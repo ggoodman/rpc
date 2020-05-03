@@ -1,5 +1,7 @@
 import { Emitter } from 'ts-primitives';
 
+export type SendMessageFunction = (msg: unknown[]) => void;
+
 /**
  * The interface for rpc-compatible transports.
  */
@@ -15,10 +17,7 @@ export interface Transport {
    * @param handler A handler function to be called with each RPC message received from a peer
    */
   onMessage(
-    handler: (msg: {
-      data: unknown[];
-      sendMessage: (msg: unknown[], transfer?: unknown[]) => void;
-    }) => void
+    handler: (msg: { data: unknown[]; sendMessage?: SendMessageFunction }) => void
   ): { dispose(): void };
 
   /**
@@ -27,7 +26,7 @@ export interface Transport {
    * @param msg The array-encoded message that should be sent to the peer over the transport
    * @param transfer An optional array of objects that should be marked as transferrable when the transport supports it
    */
-  sendMessage(msg: unknown[]): void;
+  sendMessage: SendMessageFunction;
 }
 
 class DomMessagePortTransport implements Transport {
@@ -35,7 +34,7 @@ class DomMessagePortTransport implements Transport {
   private readonly _boundSendMessage = this.sendMessage.bind(this);
   private readonly _onMessage = new Emitter<{
     data: unknown[];
-    sendMessage: (msg: unknown[], transfer?: unknown[]) => void;
+    sendMessage: SendMessageFunction;
   }>();
 
   constructor(private readonly port: MessagePort) {
@@ -71,7 +70,7 @@ class DomWorkerTransport implements Transport {
   private readonly _boundSendMessage = this.sendMessage.bind(this);
   private readonly _onMessage = new Emitter<{
     data: unknown[];
-    sendMessage: (msg: unknown[], transfer?: unknown[]) => void;
+    sendMessage: SendMessageFunction;
   }>();
 
   constructor(private readonly worker: Worker) {
@@ -105,7 +104,7 @@ class NodeMessagePortTransport implements Transport {
   private readonly _boundSendMessage = this.sendMessage.bind(this);
   private readonly _onMessage = new Emitter<{
     data: unknown[];
-    sendMessage: (msg: unknown[], transfer?: unknown[]) => void;
+    sendMessage: SendMessageFunction;
   }>();
 
   constructor(private readonly port: import('worker_threads').MessagePort) {

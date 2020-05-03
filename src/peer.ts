@@ -2,7 +2,7 @@ import { DisposableStore, Thenable } from 'ts-primitives';
 
 import { createDeferred, thenableAlreadySettled, Deferred } from './util';
 import { Codec, ErrorCodec, FunctionCodec } from './codec';
-import { isIncomingInvocationMessage, isIncomingResponseMessage } from './types';
+import { isIncomingInvocationMessage, isIncomingResponseMessage } from './messages';
 import { Transport } from './transport';
 import { Decoder } from './decoder';
 import { Encoder } from './encoder';
@@ -43,8 +43,10 @@ export class Peer<
 
     this.disposer.add(this.transport);
 
+    const boundSendMessage = this.transport.sendMessage.bind(this.transport);
+
     this.transport.onMessage(({ data, sendMessage }) => {
-      const boundSendMessage = sendMessage;
+      const localSendMessage = sendMessage || boundSendMessage;
 
       // This is a request coming from the peer to call a function on the local API
       if (isIncomingInvocationMessage(data)) {
@@ -78,7 +80,9 @@ export class Peer<
             localMethod = namedFunction;
           }
 
-          const mappedArgs = args.map(arg => this.decoder.decode(arg));
+          const mappedArgs = args.map(arg =>
+            this.decoder.decode(arg, { sendMessage: localSendMessage })
+          );
 
           return localMethod(...mappedArgs);
         };
@@ -86,12 +90,12 @@ export class Peer<
         return void resolvedPromise.then(wrappedInvoke).then(
           result => {
             if (reqId > 0) {
-              boundSendMessage([-reqId, null, this.encoder.encode(result)]);
+              localSendMessage([-reqId, null, this.encoder.encode(result)]);
             }
           },
           err => {
             if (reqId > 0) {
-              boundSendMessage([-reqId, this.encoder.encode(err)]);
+              localSendMessage([-reqId, this.encoder.encode(err)]);
             } else {
               throw err;
             }
@@ -111,10 +115,10 @@ export class Peer<
         this.pendingRemoteOperations.delete(-id);
 
         if (err) {
-          return dfd.reject(this.decoder.decode(err) as Error);
+          return dfd.reject(this.decoder.decode(err, { sendMessage: localSendMessage }) as Error);
         }
 
-        return dfd.resolve(this.decoder.decode(result));
+        return dfd.resolve(this.decoder.decode(result, { sendMessage: localSendMessage }));
       }
     });
   }

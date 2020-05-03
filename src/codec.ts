@@ -1,6 +1,6 @@
-import { WrappedType, WrappedError, WrappedFunction } from './types';
+import { WrappedType, WrappedError, WrappedFunction } from './messages';
 import { Thenable } from 'ts-primitives';
-import { resolvedPromise } from './constants';
+import { SendMessageFunction } from './transport';
 
 export interface Codec<
   TName extends string = string,
@@ -10,7 +10,7 @@ export interface Codec<
   readonly name: TName;
   canEncode(obj: unknown): boolean;
   encode(obj: TValue): TEncoded;
-  decode(wrappedObj: TEncoded): TValue;
+  decode(wrappedObj: TEncoded, ctx: { sendMessage: SendMessageFunction }): TValue;
   dispose(): void;
 }
 
