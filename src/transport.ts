@@ -1,5 +1,7 @@
 import { Emitter } from 'ts-primitives';
 
+export type SendMessageFunction = (msg: unknown[]) => void;
+
 /**
  * The interface for rpc-compatible transports.
  */
@@ -14,7 +16,9 @@ export interface Transport {
    *
    * @param handler A handler function to be called with each RPC message received from a peer
    */
-  onMessage(handler: (msg: unknown[]) => void): { dispose(): void };
+  onMessage(
+    handler: (msg: { data: unknown[]; sendMessage?: SendMessageFunction }) => void
+  ): { dispose(): void };
 
   /**
    * Send an RPC message to the peer over this transport
@@ -22,12 +26,16 @@ export interface Transport {
    * @param msg The array-encoded message that should be sent to the peer over the transport
    * @param transfer An optional array of objects that should be marked as transferrable when the transport supports it
    */
-  sendMessage(msg: unknown[], transfer?: unknown[]): void;
+  sendMessage: SendMessageFunction;
 }
 
 class DomMessagePortTransport implements Transport {
   private readonly _boundOnMessageHandler = this._onMessageHandler.bind(this);
-  private readonly _onMessage = new Emitter<unknown[]>();
+  private readonly _boundSendMessage = this.sendMessage.bind(this);
+  private readonly _onMessage = new Emitter<{
+    data: unknown[];
+    sendMessage: SendMessageFunction;
+  }>();
 
   constructor(private readonly port: MessagePort) {
     this.port.addEventListener('message', this._boundOnMessageHandler);
@@ -44,8 +52,8 @@ class DomMessagePortTransport implements Transport {
     this.port.close();
   }
 
-  sendMessage(msg: unknown[], transfer?: Transferable[]) {
-    this.port.postMessage(msg, { transfer });
+  sendMessage(msg: unknown[]) {
+    this.port.postMessage(msg);
   }
 
   private _onMessageHandler(e: MessageEvent) {
@@ -53,13 +61,17 @@ class DomMessagePortTransport implements Transport {
       return;
     }
 
-    this._onMessage.fire(e.data);
+    this._onMessage.fire({ data: e.data, sendMessage: this._boundSendMessage });
   }
 }
 
 class DomWorkerTransport implements Transport {
   private readonly _boundOnMessageHandler = this._onMessageHandler.bind(this);
-  private readonly _onMessage = new Emitter<unknown[]>();
+  private readonly _boundSendMessage = this.sendMessage.bind(this);
+  private readonly _onMessage = new Emitter<{
+    data: unknown[];
+    sendMessage: SendMessageFunction;
+  }>();
 
   constructor(private readonly worker: Worker) {
     this.worker.addEventListener('message', this._boundOnMessageHandler);
@@ -74,8 +86,8 @@ class DomWorkerTransport implements Transport {
     this.worker.removeEventListener('message', this._boundOnMessageHandler);
   }
 
-  sendMessage(msg: unknown[], transfer?: Transferable[]) {
-    this.worker.postMessage(msg, { transfer });
+  sendMessage(msg: unknown[]) {
+    this.worker.postMessage(msg);
   }
 
   private _onMessageHandler(e: MessageEvent) {
@@ -83,13 +95,17 @@ class DomWorkerTransport implements Transport {
       return;
     }
 
-    this._onMessage.fire(e.data);
+    this._onMessage.fire({ data: e.data, sendMessage: this._boundSendMessage });
   }
 }
 
 class NodeMessagePortTransport implements Transport {
   private readonly _boundOnMessageHandler = this._onMessageHandler.bind(this);
-  private readonly _onMessage = new Emitter<unknown[]>();
+  private readonly _boundSendMessage = this.sendMessage.bind(this);
+  private readonly _onMessage = new Emitter<{
+    data: unknown[];
+    sendMessage: SendMessageFunction;
+  }>();
 
   constructor(private readonly port: import('worker_threads').MessagePort) {
     this.port.on('message', this._boundOnMessageHandler);
@@ -104,8 +120,8 @@ class NodeMessagePortTransport implements Transport {
     this.port.removeListener('message', this._boundOnMessageHandler);
   }
 
-  sendMessage(msg: unknown[], transfer?: (import('worker_threads').MessagePort | ArrayBuffer)[]) {
-    this.port.postMessage(msg, transfer);
+  sendMessage(msg: unknown[]) {
+    this.port.postMessage(msg);
   }
 
   private _onMessageHandler(e: unknown) {
@@ -113,7 +129,7 @@ class NodeMessagePortTransport implements Transport {
       return;
     }
 
-    this._onMessage.fire(e);
+    this._onMessage.fire({ data: e, sendMessage: this._boundSendMessage });
   }
 }
 

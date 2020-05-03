@@ -10,6 +10,9 @@
   "files": [
     "dist"
   ],
+  "engines": {
+    "node": ">=10.13.0"
+  },
   "scripts": {
     "prebuild": "rm -rf dist",
     "build": "rollup -c",
@@ -29,14 +32,15 @@
     "ts-primitives": "^1.1.0"
   },
   "devDependencies": {
-    "@ggoodman/ts-lab": "^1.0.1",
-    "@wessberg/rollup-plugin-ts": "^1.1.80",
+    "@ggoodman/ts-lab": "^1.0.3",
+    "@wessberg/rollup-plugin-ts": "^1.2.24",
     "prettier": "^1.19.1",
-    "rollup": "^1.27.4",
+    "rollup": "^2.7.6",
     "rollup-plugin-commonjs": "^10.1.0",
     "rollup-plugin-node-resolve": "^5.2.0",
     "rollup-plugin-terser": "^5.1.2",
-    "typescript": "^3.7.3"
+    "typescript": "^3.7.5",
+    "zeromq": "^6.0.0-beta.6"
   },
   "prettier": {
     "printWidth": 100,

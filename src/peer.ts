@@ -2,7 +2,7 @@ import { DisposableStore, Thenable } from 'ts-primitives';
 
 import { createDeferred, thenableAlreadySettled, Deferred } from './util';
 import { Codec, ErrorCodec, FunctionCodec } from './codec';
-import { isIncomingInvocationMessage, isIncomingResponseMessage } from './types';
+import { isIncomingInvocationMessage, isIncomingResponseMessage } from './messages';
 import { Transport } from './transport';
 import { Decoder } from './decoder';
 import { Encoder } from './encoder';
@@ -43,10 +43,14 @@ export class Peer<
 
     this.disposer.add(this.transport);
 
-    this.transport.onMessage(msg => {
+    const boundSendMessage = this.transport.sendMessage.bind(this.transport);
+
+    this.transport.onMessage(({ data, sendMessage }) => {
+      const localSendMessage = sendMessage || boundSendMessage;
+
       // This is a request coming from the peer to call a function on the local API
-      if (isIncomingInvocationMessage(msg)) {
-        const [reqId, methodNameOrAnonymousFunctionId, ...args] = msg;
+      if (isIncomingInvocationMessage(data)) {
+        const [reqId, methodNameOrAnonymousFunctionId, ...args] = data;
 
         const wrappedInvoke = () => {
           let localMethod: (...args: any) => any;
@@ -76,7 +80,9 @@ export class Peer<
             localMethod = namedFunction;
           }
 
-          const mappedArgs = args.map(arg => this.decoder.decode(arg));
+          const mappedArgs = args.map(arg =>
+            this.decoder.decode(arg, { sendMessage: localSendMessage })
+          );
 
           return localMethod(...mappedArgs);
         };
@@ -84,12 +90,12 @@ export class Peer<
         return void resolvedPromise.then(wrappedInvoke).then(
           result => {
             if (reqId > 0) {
-              this.transport.sendMessage([-reqId, null, this.encoder.encode(result)]);
+              localSendMessage([-reqId, null, this.encoder.encode(result)]);
             }
           },
           err => {
             if (reqId > 0) {
-              this.transport.sendMessage([-reqId, this.encoder.encode(err)]);
+              localSendMessage([-reqId, this.encoder.encode(err)]);
             } else {
               throw err;
             }
@@ -98,8 +104,8 @@ export class Peer<
       }
 
       // This is an incoming message the contains the outcome of a previous invocation.
-      if (isIncomingResponseMessage(msg)) {
-        const [id, err, result] = msg;
+      if (isIncomingResponseMessage(data)) {
+        const [id, err, result] = data;
         const dfd = this.pendingRemoteOperations.get(-id);
 
         if (!dfd) {
@@ -109,10 +115,10 @@ export class Peer<
         this.pendingRemoteOperations.delete(-id);
 
         if (err) {
-          return dfd.reject(this.decoder.decode(err) as Error);
+          return dfd.reject(this.decoder.decode(err, { sendMessage: localSendMessage }) as Error);
         }
 
-        return dfd.resolve(this.decoder.decode(result));
+        return dfd.resolve(this.decoder.decode(result, { sendMessage: localSendMessage }));
       }
     });
   }
